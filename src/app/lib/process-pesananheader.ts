@@ -203,15 +203,31 @@ export async function processUpdate(data: any, detail: any, id: any) {
   const allPesananHeaders = await db("pesananheader").select('*').orderBy('customer');
   console.log("All Pesanan Headers:", allPesananHeaders); // Log all headers
 
-  // Debugging comparison
-  const updatedHeaderIndex = allPesananHeaders.findIndex(header => {
-    console.log("Comparing header ID:", header.id, "with ID:", id);
-    return header.id === id;
+  // Mengambil detail untuk setiap header
+  const pesananDetailPromises = allPesananHeaders.map(async (header) => {
+    const details = await db('pesanandetail')
+      .where('pesananheaderid', header.id); // Mengambil detail untuk setiap header
+    return {
+      ...header,
+      details, // Menambahkan detail ke header
+    };
   });
+  const pesananWithDetails = await Promise.all(pesananDetailPromises); // Tunggu hingga semua detail selesai
 
-  console.log("Updated Header Index:", updatedHeaderIndex); // Log the index
+  // Ensure both IDs are the same type (e.g., both strings)
+  const updatedRowIndex = allPesananHeaders.findIndex(header => String(header.id) === String(id));
+  console.log("Updated Row Index:", updatedRowIndex); // Log the index of the updated row
 
-  // Save updated index to Redis or handle further logic as necessary...
+  // Save the index to Redis
+  if (updatedRowIndex !== -1) {
+    await redis.set('newPesananHeaderIndex', updatedRowIndex);
+  } else {
+    console.error('Updated row not found in the list.');
+  }
+   // Simpan posisi (index) dari pesanan header yang baru ditambahkan
+
+  // Simpan data semua pesanan header ke Redis (optional, sesuai kebutuhan)
+  await redis.set('newRow', JSON.stringify(pesananWithDetails));
 
   return data; // Return the updated data
 }
@@ -221,6 +237,17 @@ export async function processUpdate(data: any, detail: any, id: any) {
 
 export async function processDelete(id:number) {
   const process = await db("pesananheader").where({ id }).del();
+  const allPesananHeaders = await db("pesananheader").select('*').orderBy('customer');
+  const pesananDetailPromises = allPesananHeaders.map(async (header) => {
+    const details = await db('pesanandetail')
+      .where('pesananheaderid', header.id); // Mengambil detail untuk setiap header
+    return {
+      ...header,
+      details, // Menambahkan detail ke header
+    };
+  });
+const pesananWithDetails = await Promise.all(pesananDetailPromises); // Tunggu hingga semua detail selesai
+await redis.set('newRow', JSON.stringify(pesananWithDetails)); // Simpan data semua pesanan header ke Redis
 
   return id;
 }

@@ -6,7 +6,7 @@ exports.seed = async function (knex:any) {
   
     const pesananData = [];
     const detailData = [];
-    const totalData = 300; // Jumlah total data yang ingin dimasukkan
+    const totalData = 10000; // Jumlah total data yang ingin dimasukkan
   
     for (let i = 1; i <= totalData; i++) {
       const randomDate = new Date(

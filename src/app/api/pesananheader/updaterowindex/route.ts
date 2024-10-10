@@ -6,7 +6,7 @@ import redis from '../../../lib/redis'; // Pastikan path ke client Redis Anda be
 // Fungsi API untuk mendapatkan newRowId
 export async function POST() {
   try {
-    const newRowId = await redis.get('updatedPesananHeaderIndex'); // Mengambil newRowId dari Redis
+    const newRowId = await redis.get('updatedRowIndex'); // Mengambil newRowId dari Redis
     if (newRowId) {
       return NextResponse.json( newRowId, { status: 200 });
     } else {
