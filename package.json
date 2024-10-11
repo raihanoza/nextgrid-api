@@ -31,6 +31,8 @@
     "primereact": "^10.8.2",
     "react": "18.3.1",
     "react-dom": "18.3.1",
+    "redis": "^4.7.0",
+    "redis-server": "^1.2.2",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -39,6 +41,7 @@
     "@types/cors": "^2.8.17",
     "@types/jsonwebtoken": "^9.0.6",
     "@types/node": "^20.14.10",
+    "@types/redis-server": "^1.2.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.5.3"
   }
