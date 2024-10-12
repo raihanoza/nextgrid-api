@@ -6,7 +6,7 @@ type SortDirection = 'ASC' | 'DESC';
 
 export async function POST(req: NextRequest) {
   try {
-    const { customer, keterangan, tglbukti, sortColumn, sortDirection, page, limit } = await req.json();
+    const { customer, keterangan, tglbukti,search, sortColumn, sortDirection, page, limit } = await req.json();
 
     // Validate sortDirection
     const validatedSortDirection: SortDirection = 
@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
       customer: customer || '',
       keterangan: keterangan || '',
       tglbukti: tglbukti || '',
+      search: search || '',
       sortColumn: sortColumn || 'customer', // Default to sorting by 'id'
       sortDirection: validatedSortDirection,
       limit: Number(limit) || 10, // Number of items per page

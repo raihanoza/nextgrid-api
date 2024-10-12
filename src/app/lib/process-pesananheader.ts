@@ -17,6 +17,7 @@ interface GetDataPesananHeaderParams {
   customer?: string;
   keterangan?: string;
   tglbukti?: string;
+  search?: string; // Global search filter
   sortColumn?: string; // Column to sort by
   sortDirection?: 'ASC' | 'DESC'; // Sorting direction
   limit?: number; // Number of records to return
@@ -27,6 +28,7 @@ export async function getDataPesananHeader({
   customer,
   keterangan,
   tglbukti,
+  search, // New global search filter
   sortColumn = 'id', // Default sort by id
   sortDirection = 'ASC', // Default sorting direction
   limit = 10, // Default limit for pagination
@@ -37,7 +39,7 @@ export async function getDataPesananHeader({
     const offset = (page - 1) * limit;
 
     // Cek cache di Redis
-    const cacheKey = `pesananheader:customer:${customer}:keterangan:${keterangan}:tglbukti:${tglbukti}:sort:${sortColumn}:${sortDirection}:limit:${limit}:page:${page}`;
+    const cacheKey = `pesananheader:customer:${customer}:keterangan:${keterangan}:tglbukti:${tglbukti}:search:${search}:sort:${sortColumn}:${sortDirection}:limit:${limit}:page:${page}`;
     const cachedData = await redis.get(cacheKey);
     
     if (cachedData) {
@@ -48,7 +50,7 @@ export async function getDataPesananHeader({
     // Ambil data pesanan header dari database
     const queryHeader = db('pesananheader').select('*');
 
-    // Apply filters
+    // Apply filters based on specific columns
     if (customer) {
       queryHeader.where('customer', 'like', `%${customer}%`); // Assuming partial match
     }
@@ -57,6 +59,15 @@ export async function getDataPesananHeader({
     }
     if (tglbukti) {
       queryHeader.where('tglbukti', '=', tglbukti); // Exact match
+    }
+
+    // Apply global search across multiple columns
+    if (search) {
+      queryHeader.where(function() {
+        this.where('customer', 'like', `%${search}%`)
+          .orWhere('keterangan', 'like', `%${search}%`)
+          .orWhere('tglbukti', 'like', `%${search}%`);
+      });
     }
 
     // Apply sorting
@@ -93,14 +104,15 @@ export async function getDataPesananHeader({
     };
 
     // Simpan hasil ke dalam cache
-    await redis.set(cacheKey, JSON.stringify(response), 'EX', 1); // Cache selama 1 jam
+    await redis.set(cacheKey, JSON.stringify(response), 'EX', 3600); // Cache selama 1 jam (3600 detik)
 
     return response;
   } catch (error) {
     console.error('Error fetching pesananheader:', error);
-    throw new Error('Database query failed'); // Rethrow error for higher-level handling
+    throw new Error('Database query failed');
   }
 }
+
 
 
 export async function getDataPesananHeaderById(id: number) {
