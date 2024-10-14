@@ -37,15 +37,7 @@ export async function getDataPesananHeader({
   try {
     // Menghitung offset berdasarkan nomor halaman
     const offset = (page - 1) * limit;
-
-    // Cek cache di Redis
-    const cacheKey = `pesananheader:customer:${customer}:keterangan:${keterangan}:tglbukti:${tglbukti}:search:${search}:sort:${sortColumn}:${sortDirection}:limit:${limit}:page:${page}`;
-    const cachedData = await redis.get(cacheKey);
     
-    if (cachedData) {
-      // Jika ada data dalam cache, kembalikan data tersebut
-      return JSON.parse(cachedData);
-    }
 
     // Ambil data pesanan header dari database
     const queryHeader = db('pesananheader').select('*');
@@ -69,16 +61,10 @@ export async function getDataPesananHeader({
           .orWhere('tglbukti', 'like', `%${search}%`);
       });
     }
-
-    // Apply sorting
     queryHeader.orderBy(sortColumn, sortDirection);
-
-    // Apply pagination (limit and offset)
     queryHeader.limit(limit).offset(offset);
 
     const pesananheader = await queryHeader;
-
-    // Ambil detail untuk setiap pesanan header
     const pesananDetailPromises = pesananheader.map(async (header) => {
       const details = await db('pesanandetail')
         .where('pesananheaderid', header.id); // Mengambil detail untuk setiap header
@@ -87,7 +73,6 @@ export async function getDataPesananHeader({
         details, // Menambahkan detail ke header
       };
     });
-
     const pesananWithDetails = await Promise.all(pesananDetailPromises); // Tunggu hingga semua detail selesai
 
     // Hitung total data
@@ -103,8 +88,6 @@ export async function getDataPesananHeader({
       data: pesananWithDetails,
     };
 
-    // Simpan hasil ke dalam cache
-    await redis.set(cacheKey, JSON.stringify(response), 'EX', 3600); // Cache selama 1 jam (3600 detik)
 
     return response;
   } catch (error) {
@@ -112,7 +95,6 @@ export async function getDataPesananHeader({
     throw new Error('Database query failed');
   }
 }
-
 
 
 export async function getDataPesananHeaderById(id: number) {
@@ -142,37 +124,33 @@ export async function processStore(data: any, detail: any) {
   // Insert pesanan details using the helper function
   await processStoreDetail(pesananHeaderId, detail);
 
-  // Fetch all pesanan headers ordered by customer\
+  // Fetch all pesanan headers ordered by customer ASC
   const allPesananHeaders = await db("pesananheader")
-  .select('*')
-  .orderBy('customer');
+    .select('*')
+    .orderBy('customer', 'asc'); // Order by customer ascending
 
-// Mengambil detail untuk setiap header
-const pesananDetailPromises = allPesananHeaders.map(async (header) => {
-  const details = await db('pesanandetail')
-    .where('pesananheaderid', header.id); // Mengambil detail untuk setiap header
-  return {
-    ...header,
-    details, // Menambahkan detail ke header
-  };
-});
-  // Find the index of the newly added header
-  const newHeaderIndex = allPesananHeaders.findIndex(header => header.id === pesananHeaderId);
-
-
-const pesananWithDetails = await Promise.all(pesananDetailPromises); // Tunggu hingga semua detail selesai
-  // Simpan ID row baru ke Redis
-  await redis.set('newRow', JSON.stringify(pesananWithDetails)); // Simpan data semua pesanan header ke Redis
-  await redis.set('newPesananHeaderIndex', newHeaderIndex); // Simpan posisi (index) dari pesanan header yang baru ditambahkan
-
-  // Invalidate cache entries related to the newly added order
+  // Get the total count of orders (headers)
   const totalCountResult = await db("pesananheader").count('* as count');
   const totalCount = Number(totalCountResult[0].count);
-  const limit = 10; // Sesuaikan dengan pagination limit Anda
 
-  const totalPages = Math.ceil(totalCount / limit); // Hitung total halaman
+  const limit = 30; // Pagination limit (30 data per page)
+  
+  // Find the position (index) of the newly added data in the ordered list
+  const newHeaderIndex = allPesananHeaders.findIndex(header => header.id === pesananHeaderId);
+  
+  // Calculate the page number for the newly added header
+  const newHeaderPage = Math.ceil((newHeaderIndex + 1) / limit); // Page starts from 1
 
-  // Clear cache for all pages
+  // Calculate index within the page
+  const indexOnPage = newHeaderIndex % limit; // Position in the page (0-indexed)
+
+  await redis.set('newPesananHeaderPage', newHeaderPage.toString()); // Save the page of the newly added order
+  await redis.set('newPesananHeaderIndex', indexOnPage.toString()); // Save the index of the new order on its page
+
+  // Invalidate cache entries related to the newly added order
+  const totalPages = Math.ceil(totalCount / limit); // Calculate total pages
+
+  // Clear cache for all pages to invalidate old cache
   for (let i = 1; i <= totalPages; i++) {
     await redis.del(`pesananheader:customer:${customer}:keterangan:${keterangan}:tglbukti:${tglbukti}:sort:id:ASC:limit:${limit}:page:${i}`);
     await redis.del(`pesananheader:customer:${customer}:keterangan:${keterangan}:tglbukti:${tglbukti}:sort:id:DESC:limit:${limit}:page:${i}`);
@@ -215,51 +193,23 @@ export async function processUpdate(data: any, detail: any, id: any) {
   const allPesananHeaders = await db("pesananheader").select('*').orderBy('customer');
   console.log("All Pesanan Headers:", allPesananHeaders); // Log all headers
 
-  // Mengambil detail untuk setiap header
-  const pesananDetailPromises = allPesananHeaders.map(async (header) => {
-    const details = await db('pesanandetail')
-      .where('pesananheaderid', header.id); // Mengambil detail untuk setiap header
-    return {
-      ...header,
-      details, // Menambahkan detail ke header
-    };
-  });
-  const pesananWithDetails = await Promise.all(pesananDetailPromises); // Tunggu hingga semua detail selesai
-
   // Ensure both IDs are the same type (e.g., both strings)
   const updatedRowIndex = allPesananHeaders.findIndex(header => String(header.id) === String(id));
-  console.log("Updated Row Index:", updatedRowIndex); // Log the index of the updated row
 
-  // Save the index to Redis
-  if (updatedRowIndex !== -1) {
-    await redis.set('newPesananHeaderIndex', updatedRowIndex);
-  } else {
-    console.error('Updated row not found in the list.');
-  }
-   // Simpan posisi (index) dari pesanan header yang baru ditambahkan
-
-  // Simpan data semua pesanan header ke Redis (optional, sesuai kebutuhan)
-  await redis.set('newRow', JSON.stringify(pesananWithDetails));
+  const pageSize = 30;
+  const indexInPage = updatedRowIndex % pageSize;
+  const newHeaderPage = Math.floor(updatedRowIndex / pageSize) + 1;
+  await redis.set('newPesananHeaderIndex', indexInPage.toString());
+  await redis.set('newPesananHeaderPage', newHeaderPage.toString());
 
   return data; // Return the updated data
 }
 
+export async function processDelete(id: number) {
+  // Menghapus pesanan header berdasarkan ID
+  await db("pesananheader").where({ id }).del();
 
-
-
-export async function processDelete(id:number) {
-  const process = await db("pesananheader").where({ id }).del();
-  const allPesananHeaders = await db("pesananheader").select('*').orderBy('customer');
-  const pesananDetailPromises = allPesananHeaders.map(async (header) => {
-    const details = await db('pesanandetail')
-      .where('pesananheaderid', header.id); // Mengambil detail untuk setiap header
-    return {
-      ...header,
-      details, // Menambahkan detail ke header
-    };
-  });
-const pesananWithDetails = await Promise.all(pesananDetailPromises); // Tunggu hingga semua detail selesai
-await redis.set('newRow', JSON.stringify(pesananWithDetails)); // Simpan data semua pesanan header ke Redis
-
+  // Mengembalikan ID yang dihapus
   return id;
 }
+
